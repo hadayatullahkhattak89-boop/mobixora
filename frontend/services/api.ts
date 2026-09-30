@@ -41,6 +41,8 @@ export function removeToken(): void {
   }
 }
 
+import { getMockFallback } from './mockData';
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   const headers = new Headers(options.headers || {});
@@ -57,23 +59,32 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers.set('X-Session-ID', sessId);
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
 
-  if (!response.ok) {
-    let errorDetail = 'Something went wrong';
-    try {
-      const errorJson = await response.json();
-      errorDetail = errorJson.detail || errorJson.message || JSON.stringify(errorJson);
-    } catch {
-      errorDetail = response.statusText;
+    if (!response.ok) {
+      let errorDetail = 'Something went wrong';
+      try {
+        const errorJson = await response.json();
+        errorDetail = errorJson.detail || errorJson.message || JSON.stringify(errorJson);
+      } catch {
+        errorDetail = response.statusText;
+      }
+      throw new Error(errorDetail);
     }
-    throw new Error(errorDetail);
-  }
 
-  return response.json();
+    return response.json();
+  } catch (error) {
+    // When backend is offline or on standalone Vercel preview, gracefully fallback
+    const fallback = getMockFallback<T>(endpoint, options);
+    if (fallback !== undefined) {
+      return fallback;
+    }
+    throw error;
+  }
 }
 
 export const api = {
