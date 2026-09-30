@@ -410,6 +410,42 @@ export const MOCK_COUPONS: Coupon[] = [
   { id: 2, code: "MOBIXORA500", discount_type: "fixed", discount_value: 500, minimum_order: 3000, usage_limit: 1000, times_used: 340, is_active: true }
 ];
 
+import { Cart, CartItem, WishlistItem } from '@/types';
+
+function getStoredCart(): Cart {
+  if (typeof window === 'undefined') return { id: 1, items: [], subtotal: 0, items_count: 0 };
+  try {
+    const raw = localStorage.getItem('mobixora_client_cart');
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { id: 1, items: [], subtotal: 0, items_count: 0 };
+}
+
+function saveStoredCart(c: Cart) {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('mobixora_client_cart', JSON.stringify(c));
+    } catch {}
+  }
+}
+
+function getStoredWishlist(): WishlistItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem('mobixora_client_wishlist');
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
+}
+
+function saveStoredWishlist(w: WishlistItem[]) {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('mobixora_client_wishlist', JSON.stringify(w));
+    } catch {}
+  }
+}
+
 export function getMockFallback<T>(endpoint: string, options?: RequestInit): T | undefined {
   const clean = endpoint.split('?')[0];
   const method = (options?.method || 'GET').toUpperCase();
@@ -538,17 +574,156 @@ export function getMockFallback<T>(endpoint: string, options?: RequestInit): T |
 
   // Cart
   if (clean === '/cart') {
-    return {
-      id: 1,
-      items: [],
-      subtotal: 0,
-      items_count: 0
-    } as unknown as T;
+    return getStoredCart() as unknown as T;
+  }
+  if (clean === '/cart/items') {
+    if (method === 'POST') {
+      try {
+        const body = options?.body ? JSON.parse(options.body as string) : {};
+        const { product_id, variant_id, quantity = 1 } = body;
+        const product = MOCK_PRODUCTS.find(p => p.id === Number(product_id)) || MOCK_PRODUCTS[0];
+        const variant = product.variants?.find(v => v.id === Number(variant_id)) || null;
+        const unit_price = Number(product.sale_price || product.price) + (variant ? Number(variant.price_adjustment) : 0);
+        
+        const cart = getStoredCart();
+        const existingIdx = cart.items.findIndex(i => i.product_id === product.id && i.variant_id === (variant?.id || null));
+        if (existingIdx >= 0) {
+          cart.items[existingIdx].quantity += Number(quantity);
+          cart.items[existingIdx].item_total = cart.items[existingIdx].quantity * cart.items[existingIdx].unit_price;
+        } else {
+          cart.items.push({
+            id: Date.now(),
+            product_id: product.id,
+            variant_id: variant?.id || null,
+            quantity: Number(quantity),
+            product: product,
+            variant: variant,
+            unit_price: unit_price,
+            item_total: unit_price * Number(quantity)
+          });
+        }
+        cart.subtotal = cart.items.reduce((sum, item) => sum + item.item_total, 0);
+        cart.items_count = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+        saveStoredCart(cart);
+        return cart as unknown as T;
+      } catch (e) {
+        return getStoredCart() as unknown as T;
+      }
+    }
+  }
+
+  if (clean.startsWith('/cart/items/')) {
+    const itemId = Number(clean.replace('/cart/items/', ''));
+    const cart = getStoredCart();
+    if (method === 'PUT') {
+      try {
+        const body = options?.body ? JSON.parse(options.body as string) : {};
+        const q = Number(body.quantity);
+        const idx = cart.items.findIndex(i => i.id === itemId);
+        if (idx >= 0) {
+          if (q <= 0) {
+            cart.items.splice(idx, 1);
+          } else {
+            cart.items[idx].quantity = q;
+            cart.items[idx].item_total = q * cart.items[idx].unit_price;
+          }
+        }
+      } catch {}
+    } else if (method === 'DELETE') {
+      cart.items = cart.items.filter(i => i.id !== itemId);
+    }
+    cart.subtotal = cart.items.reduce((sum, item) => sum + item.item_total, 0);
+    cart.items_count = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+    saveStoredCart(cart);
+    return cart as unknown as T;
+  }
+
+  if (clean === '/cart/clear') {
+    const emptyCart: Cart = { id: 1, items: [], subtotal: 0, items_count: 0 };
+    saveStoredCart(emptyCart);
+    return emptyCart as unknown as T;
   }
 
   // Wishlist
   if (clean === '/wishlist') {
-    return [] as unknown as T;
+    return getStoredWishlist() as unknown as T;
+  }
+  if (clean === '/wishlist/toggle') {
+    try {
+      const body = options?.body ? JSON.parse(options.body as string) : {};
+      const pid = Number(body.product_id);
+      const list = getStoredWishlist();
+      const existingIdx = list.findIndex(w => w.product_id === pid);
+      if (existingIdx >= 0) {
+        list.splice(existingIdx, 1);
+        saveStoredWishlist(list);
+        return { action: 'removed', in_wishlist: false, message: 'Removed from wishlist' } as unknown as T;
+      } else {
+        const product = MOCK_PRODUCTS.find(p => p.id === pid) || MOCK_PRODUCTS[0];
+        list.push({
+          id: Date.now(),
+          product_id: pid,
+          product: product,
+          created_at: new Date().toISOString()
+        });
+        saveStoredWishlist(list);
+        return { action: 'added', in_wishlist: true, message: 'Added to wishlist' } as unknown as T;
+      }
+    } catch {
+      return { action: 'added', in_wishlist: true, message: 'Added to wishlist' } as unknown as T;
+    }
+  }
+  if (clean.startsWith('/wishlist/')) {
+    const pid = Number(clean.replace('/wishlist/', ''));
+    const list = getStoredWishlist().filter(w => w.product_id !== pid);
+    saveStoredWishlist(list);
+    return { message: 'Removed' } as unknown as T;
+  }
+
+  // Orders / Checkout
+  if (clean === '/orders') {
+    if (method === 'POST') {
+      try {
+        const body = options?.body ? JSON.parse(options.body as string) : {};
+        const randNum = Math.floor(100000 + Math.random() * 900000);
+        const orderNum = `ORD-2026-${randNum}`;
+        const newOrder: Order = {
+          id: Date.now(),
+          order_number: orderNum,
+          customer_name: body.customer_name || 'Customer',
+          customer_email: body.customer_email || 'customer@example.com',
+          customer_phone: body.customer_phone || '03001234567',
+          shipping_address: body.shipping_address || 'Address',
+          shipping_city: body.shipping_city || 'Islamabad',
+          shipping_province: body.shipping_province || 'Islamabad Capital Territory',
+          shipping_postal_code: body.shipping_postal_code || '44000',
+          subtotal: body.subtotal || 50000,
+          discount: body.discount || 0,
+          shipping_fee: body.shipping_fee || 0,
+          total: body.total || 50000,
+          payment_method: body.payment_method || 'Cash on Delivery',
+          payment_status: 'pending',
+          order_status: 'Pending',
+          notes: body.notes || null,
+          coupon_code: body.coupon_code || null,
+          created_at: new Date().toISOString(),
+          items: body.items || []
+        };
+        MOCK_ORDERS.unshift(newOrder);
+        // Clear cart
+        saveStoredCart({ id: 1, items: [], subtotal: 0, items_count: 0 });
+        return newOrder as unknown as T;
+      } catch {
+        return MOCK_ORDERS[0] as unknown as T;
+      }
+    }
+    return MOCK_ORDERS as unknown as T;
+  }
+
+  if (clean.startsWith('/orders/')) {
+    const slug = clean.replace('/orders/', '');
+    const found = MOCK_ORDERS.find(o => o.order_number === slug || String(o.id) === slug);
+    return (found || MOCK_ORDERS[0]) as unknown as T;
   }
 
   return undefined;

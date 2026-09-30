@@ -44,6 +44,19 @@ export function removeToken(): void {
 import { getMockFallback } from './mockData';
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const isCloudWithoutBackend = typeof window !== 'undefined' && 
+    window.location.hostname !== 'localhost' && 
+    window.location.hostname !== '127.0.0.1' && 
+    !process.env.NEXT_PUBLIC_API_URL;
+
+  // On public domain like Vercel without remote backend, avoid triggering Android local network warning & Failed to fetch
+  if (isCloudWithoutBackend) {
+    const fallback = getMockFallback<T>(endpoint, options);
+    if (fallback !== undefined) {
+      return fallback;
+    }
+  }
+
   const url = `${API_BASE}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   const headers = new Headers(options.headers || {});
 
