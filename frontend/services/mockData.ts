@@ -1,4 +1,16 @@
-import { Product, Category, Brand, Review, ProductListResponse } from '@/types';
+import { Product, Category, Brand, Review, ProductListResponse, User, DashboardStats, Order, Coupon } from '@/types';
+
+export const MOCK_ADMIN_USER: User = {
+  id: 1,
+  name: "Mobixora Admin",
+  email: "admin@mobixora.com",
+  phone: "03001234567",
+  role: "admin",
+  is_active: true,
+  created_at: "2026-09-01T00:00:00Z",
+  orders_count: 5,
+  total_spent: 450000
+};
 
 export const MOCK_CATEGORIES: Category[] = [
   { id: 1, name: "Smartphones", slug: "smartphones", description: "Latest cutting-edge mobile smartphones from top global manufacturers.", image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=600&auto=format&fit=crop&q=80", is_active: true },
@@ -26,7 +38,7 @@ export const MOCK_BRANDS: Brand[] = [
   { id: 12, name: "Spigen", slug: "spigen", logo: "https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?w=300&auto=format&fit=crop&q=80", is_active: true },
 ];
 
-export const MOCK_PRODUCTS: Product[] = [
+export let MOCK_PRODUCTS: Product[] = [
   {
     id: 1,
     name: "Apple iPhone 16 Pro Max",
@@ -304,9 +316,141 @@ export const MOCK_REVIEWS: Review[] = [
   }
 ];
 
+export const MOCK_ORDERS: Order[] = [
+  {
+    id: 1,
+    order_number: "ORD-2026-000101",
+    customer_name: "Ahmed Khan",
+    customer_email: "ahmed.k@example.com",
+    customer_phone: "03123456789",
+    shipping_address: "House 12, Street 4, Sector F-11",
+    shipping_city: "Islamabad",
+    shipping_province: "Islamabad Capital Territory",
+    subtotal: 479999,
+    discount: 0,
+    shipping_fee: 0,
+    total: 479999,
+    payment_method: "Cash on Delivery",
+    payment_status: "pending",
+    order_status: "Processing",
+    created_at: "2026-09-29T11:20:00Z",
+    items: [
+      {
+        id: 1,
+        order_id: 1,
+        product_name: "Apple iPhone 16 Pro Max",
+        quantity: 1,
+        price: 479999,
+        subtotal: 479999
+      }
+    ]
+  },
+  {
+    id: 2,
+    order_number: "ORD-2026-000102",
+    customer_name: "Sara Ali",
+    customer_email: "sara.ali@example.com",
+    customer_phone: "03219876543",
+    shipping_address: "Apartment 5B, Phase 8, DHA",
+    shipping_city: "Karachi",
+    shipping_province: "Sindh",
+    subtotal: 64999,
+    discount: 5000,
+    shipping_fee: 0,
+    total: 59999,
+    payment_method: "Cash on Delivery",
+    payment_status: "paid",
+    order_status: "Delivered",
+    created_at: "2026-09-28T16:45:00Z",
+    items: [
+      {
+        id: 2,
+        order_id: 2,
+        product_name: "Apple AirPods Pro (2nd Gen, USB-C)",
+        quantity: 1,
+        price: 64999,
+        subtotal: 64999
+      }
+    ]
+  }
+];
+
+export const MOCK_DASHBOARD_STATS: DashboardStats = {
+  stats: {
+    total_revenue: 1425000,
+    total_orders: 28,
+    total_customers: 64,
+    total_products: MOCK_PRODUCTS.length,
+    pending_orders: 4,
+    delivered_orders: 22,
+    cancelled_orders: 2,
+    low_stock_products: 3,
+  },
+  sales_chart: [
+    { date: "Mon", revenue: 180000, orders: 3 },
+    { date: "Tue", revenue: 290000, orders: 5 },
+    { date: "Wed", revenue: 210000, orders: 4 },
+    { date: "Thu", revenue: 340000, orders: 6 },
+    { date: "Fri", revenue: 420000, orders: 8 },
+    { date: "Sat", revenue: 380000, orders: 7 },
+    { date: "Sun", revenue: 510000, orders: 9 }
+  ],
+  status_breakdown: {
+    "Pending": 4,
+    "Processing": 3,
+    "Shipped": 5,
+    "Delivered": 22,
+    "Cancelled": 2
+  },
+  recent_orders: MOCK_ORDERS
+};
+
+export const MOCK_COUPONS: Coupon[] = [
+  { id: 1, code: "WELCOME10", discount_type: "percentage", discount_value: 10, minimum_order: 5000, usage_limit: 500, times_used: 120, is_active: true },
+  { id: 2, code: "MOBIXORA500", discount_type: "fixed", discount_value: 500, minimum_order: 3000, usage_limit: 1000, times_used: 340, is_active: true }
+];
+
 export function getMockFallback<T>(endpoint: string, options?: RequestInit): T | undefined {
   const clean = endpoint.split('?')[0];
+  const method = (options?.method || 'GET').toUpperCase();
 
+  // Auth
+  if (clean === '/auth/login' || clean === '/auth/register') {
+    return {
+      access_token: "mock_jwt_token_admin_session",
+      token_type: "bearer",
+      user: MOCK_ADMIN_USER
+    } as unknown as T;
+  }
+  if (clean === '/auth/me') {
+    return MOCK_ADMIN_USER as unknown as T;
+  }
+  if (clean === '/auth/addresses') {
+    return [] as unknown as T;
+  }
+
+  // Admin Stats & Orders
+  if (clean === '/admin/stats') {
+    return MOCK_DASHBOARD_STATS as unknown as T;
+  }
+  if (clean === '/admin/orders') {
+    return MOCK_ORDERS as unknown as T;
+  }
+  if (clean === '/admin/customers') {
+    return [
+      MOCK_ADMIN_USER,
+      { id: 2, name: "Ahmed Khan", email: "ahmed@example.com", phone: "03123456789", role: "customer", is_active: true, orders_count: 3, total_spent: 540000 },
+      { id: 3, name: "Sara Ali", email: "sara@example.com", phone: "03219876543", role: "customer", is_active: true, orders_count: 2, total_spent: 120000 }
+    ] as unknown as T;
+  }
+  if (clean === '/admin/inventory') {
+    return MOCK_PRODUCTS as unknown as T;
+  }
+  if (clean === '/admin/coupons' || clean === '/coupons') {
+    return MOCK_COUPONS as unknown as T;
+  }
+
+  // Categories
   if (clean === '/categories') {
     return MOCK_CATEGORIES as unknown as T;
   }
@@ -316,6 +460,7 @@ export function getMockFallback<T>(endpoint: string, options?: RequestInit): T |
     return (found || MOCK_CATEGORIES[0]) as unknown as T;
   }
 
+  // Brands
   if (clean === '/brands') {
     return MOCK_BRANDS as unknown as T;
   }
@@ -325,7 +470,42 @@ export function getMockFallback<T>(endpoint: string, options?: RequestInit): T |
     return (found || MOCK_BRANDS[0]) as unknown as T;
   }
 
+  // Products
   if (clean === '/products') {
+    if (method === 'POST') {
+      try {
+        const body = options?.body ? JSON.parse(options.body as string) : {};
+        const newProduct: Product = {
+          id: MOCK_PRODUCTS.length + 1,
+          name: body.name || "New Client Product",
+          slug: (body.name || "new-product").toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          sku: body.sku || `MBX-PRD-${Date.now().toString().slice(-4)}`,
+          price: Number(body.price) || 1000,
+          sale_price: body.sale_price ? Number(body.sale_price) : null,
+          stock: Number(body.stock) || 20,
+          is_featured: Boolean(body.is_featured),
+          is_new: true,
+          is_active: true,
+          rating: 5.0,
+          reviews_count: 0,
+          description: body.description || "Freshly added client product.",
+          category_id: body.category_id || 1,
+          brand_id: body.brand_id || 1,
+          category: MOCK_CATEGORIES.find(c => c.id === body.category_id) || MOCK_CATEGORIES[0],
+          brand: MOCK_BRANDS.find(b => b.id === body.brand_id) || MOCK_BRANDS[0],
+          images: body.images?.length ? body.images : [
+            { id: Date.now(), image_url: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=800&auto=format&fit=crop&q=80", sort_order: 0 }
+          ],
+          variants: body.variants || [],
+          specifications: body.specifications || []
+        };
+        MOCK_PRODUCTS.unshift(newProduct);
+        return newProduct as unknown as T;
+      } catch {
+        return MOCK_PRODUCTS[0] as unknown as T;
+      }
+    }
+
     const isFeatured = endpoint.includes('is_featured=true');
     const isNew = endpoint.includes('is_new=true');
     let items = [...MOCK_PRODUCTS];
@@ -343,14 +523,20 @@ export function getMockFallback<T>(endpoint: string, options?: RequestInit): T |
 
   if (clean.startsWith('/products/')) {
     const slug = clean.replace('/products/', '');
+    if (method === 'DELETE') {
+      MOCK_PRODUCTS = MOCK_PRODUCTS.filter(p => String(p.id) !== slug && p.slug !== slug);
+      return { message: "Product deleted successfully" } as unknown as T;
+    }
     const found = MOCK_PRODUCTS.find(p => p.slug === slug || String(p.id) === slug);
     return (found || MOCK_PRODUCTS[0]) as unknown as T;
   }
 
+  // Reviews
   if (clean === '/reviews/recent' || clean === '/reviews') {
     return MOCK_REVIEWS as unknown as T;
   }
 
+  // Cart
   if (clean === '/cart') {
     return {
       id: 1,
@@ -360,6 +546,7 @@ export function getMockFallback<T>(endpoint: string, options?: RequestInit): T |
     } as unknown as T;
   }
 
+  // Wishlist
   if (clean === '/wishlist') {
     return [] as unknown as T;
   }
